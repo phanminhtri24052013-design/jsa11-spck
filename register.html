@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng ký - Melody Flow</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="auth-page">
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="logo">🎵 Melody Flow</div>
+            <h2>Tạo tài khoản mới</h2>
+            
+            <div class="input-group">
+                <i class="fas fa-envelope"></i>
+                <input type="email" id="email" placeholder="Email">
+            </div>
+            
+            <div class="input-group">
+                <i class="fas fa-lock"></i>
+                <input type="password" id="password" placeholder="Mật khẩu">
+            </div>
+
+            <!-- Trường xác nhận mật khẩu mới bổ sung -->
+            <div class="input-group">
+                <i class="fas fa-check-double"></i>
+                <input type="password" id="confirmPassword" placeholder="Xác nhận mật khẩu">
+            </div>
+
+            <div class="auth-buttons">
+                <button class="btn-register" onclick="register()">Đăng ký</button>
+            </div>
+            
+            <p class="auth-redirect">Đã có tài khoản? <a href="login.html">Đăng nhập ngay</a></p>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

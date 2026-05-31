@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Melody Flow - Bản phối hoàn hảo</title>
+    <link rel="stylesheet" href="style.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <script>
+      if (localStorage.getItem("isLoggedIn") !== "true") {
+        window.location.href = "login.html";
+      }
+    </script>
+
+    <div class="main-layout">
+      <aside class="sidebar">
+        <div class="logo">🎵 Melody Flow</div>
+        <nav>
+          <ul>
+            <li
+              id="nav-discover"
+              class="active"
+              onclick="switchTab('discover')"
+            >
+              <i class="fas fa-home"></i> Khám phá
+            </li>
+            <li id="nav-library" onclick="switchTab('library')">
+              <i class="fas fa-heart"></i> Thư viện
+            </li>
+            <li id="nav-playlist" onclick="switchTab('playlist')">
+              <i class="fas fa-list"></i> Playlist
+            </li>
+            <li id="nav-profile" onclick="switchTab('profile')">
+              <i class="fas fa-user"></i> Hồ sơ cá nhân
+            </li>
+          </ul>
+        </nav>
+        <div class="user-box">
+          <p>
+            <i class="fas fa-user-circle"></i>
+            <span id="userDisplay">User</span>
+          </p>
+          <button class="btn-logout" onclick="logout()">Thoát</button>
+        </div>
+      </aside>
+
+      <main class="content">
+        <header class="search-header" id="mainSearchHeader">
+          <div class="search-bar">
+            <i class="fas fa-search"></i>
+            <input
+              type="text"
+              id="searchInput"
+              placeholder="Tìm bài hát, nghệ sĩ trên iTunes..."
+            />
+          </div>
+          <button class="btn-search" onclick="searchMusic()">Tìm kiếm</button>
+        </header>
+
+        <section class="results-section">
+          <h2 id="sectionTitle">Gợi ý cho bạn</h2>
+          <div id="musicList" class="music-grid">
+            <div class="loader">Đang tải nhạc...</div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+      window.onload = function () {
+        if (typeof loadFeaturedMusic === "function") {
+          loadFeaturedMusic();
+        }
+        updateUserSidebarDisplay();
+      };
+    </script>
+  </body>
+</html>
