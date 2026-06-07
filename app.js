@@ -1,67 +1,141 @@
 // --- 1. QUẢN LÝ TÀI KHOẢN (Đăng ký, Đăng nhập, Đăng xuất) ---
+// === IMPORTANT ===
+// Đây là phần quan trọng nhất với auth và dữ liệu user.
 
-window.register = function () {
+
+// Helper lưu nhiều user dưới dạng map { email: { email, passwordHash, displayName, createdAt } }
+function getUsers() {
+    try {
+        return JSON.parse(localStorage.getItem('users_db')) || {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function saveUsers(users) {
+    localStorage.setItem('users_db', JSON.stringify(users));
+}
+
+function getUserByEmail(email) {
+    const users = getUsers();
+    if (users[email]) return users[email];
+    // tương thích ngược: kiểm tra key user cũ duy nhất
+    try {
+        const legacy = JSON.parse(localStorage.getItem('user_db'));
+        if (legacy && legacy.email === email) return legacy;
+    } catch (e) {}
+    return null;
+}
+
+async function hashPassword(password) {
+    if (!window.crypto || !crypto.subtle) {
+        // dự phòng: hash đơn giản (không an toàn) - nhưng browser hiện đại hỗ trợ crypto.subtle
+        let h = 0;
+        for (let i = 0; i < password.length; i++) h = ((h << 5) - h) + password.charCodeAt(i);
+        return 'fallback-' + (h >>> 0).toString(16);
+    }
+    const enc = new TextEncoder();
+    const data = enc.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+window.register = async function () {
+    // === NOTE ===
+    // Đây là nơi xử lý đăng ký.
+    // Lấy dữ liệu từ các input trên trang đăng ký
     const email = document.getElementById("email").value.trim();
     const password = document.getElementById("password").value;
     const confirmPassword = document.getElementById("confirmPassword").value;
 
-    // Kiểm tra nhập liệu trống
     if (!email || !password || !confirmPassword) {
         return alert("Vui lòng nhập đầy đủ tất cả các trường dữ liệu!");
     }
 
-    // Kiểm tra mật khẩu trùng khớp
     if (password !== confirmPassword) {
         return alert("Mật khẩu xác nhận không trùng khớp! Vui lòng kiểm tra lại.");
     }
 
-    // Tự động ghi lại ngày đăng ký tài khoản
+    const users = getUsers();
+    if (users[email]) return alert('Email này đã được đăng ký. Vui lòng dùng email khác hoặc đăng nhập.');
+
     const today = new Date();
     const createdDate = today.getDate() + '/' + (today.getMonth() + 1) + '/' + today.getFullYear();
-
-    // Tên hiển thị mặc định ban đầu lấy từ Email
     const defaultName = email.split('@')[0];
 
-    const userData = { 
-        email: email, 
-        password: password,
+    const passwordHash = await hashPassword(password);
+
+    users[email] = {
+        email,
+        passwordHash,
         displayName: defaultName,
         createdAt: createdDate
     };
 
-    localStorage.setItem("user_db", JSON.stringify(userData));
+    saveUsers(users);
     alert("Đăng ký thành công! Hãy dùng tài khoản này để đăng nhập.");
-    window.location.href = "login.html"; // Chuyển hướng ngay sang trang đăng nhập
+    window.location.href = "login.html";
 };
 
-window.login = function () {
+window.login = async function () {
+    // === NOTE ===
+    // Đây là hàm login, nó kiểm tra user và lưu trạng thái đăng nhập.
+    // Lấy dữ liệu từ các input trên trang đăng nhập
     const email = document.getElementById("email").value.trim();
     const password = document.getElementById("password").value;
-    const storedUser = JSON.parse(localStorage.getItem("user_db"));
+    const storedUser = getUserByEmail(email);
 
-    if (storedUser && storedUser.email === email && storedUser.password === password) {
-        localStorage.setItem("isLoggedIn", "true");
-        localStorage.setItem("currentUser", email);
-        alert("Đăng nhập thành công!");
-        window.location.href = "index.html"; 
-    } else {
-        alert("Email hoặc mật khẩu không chính xác!");
+    if (!storedUser) return alert("Email hoặc mật khẩu không chính xác!");
+
+    // Nếu user có passwordHash, so sánh hash; nếu tài khoản cũ có mật khẩu plaintext, di cư nó
+    if (storedUser.passwordHash) {
+        const hash = await hashPassword(password);
+        if (hash === storedUser.passwordHash) {
+            localStorage.setItem("isLoggedIn", "true");
+            localStorage.setItem("currentUser", email);
+            alert("Đăng nhập thành công!");
+            window.location.href = "index.html";
+            return;
+        }
+    } else if (storedUser.password !== undefined) {
+        // mật khẩu plaintext cũ (từ user_db cũ). Di cư sang users_db với mật khẩu được hash.
+        if (storedUser.password === password) {
+            const users = getUsers();
+            const passwordHash = await hashPassword(password);
+            users[email] = {
+                email,
+                passwordHash,
+                displayName: storedUser.displayName || email.split('@')[0],
+                createdAt: storedUser.createdAt || (new Date()).toLocaleDateString()
+            };
+            saveUsers(users);
+            localStorage.removeItem('user_db');
+            localStorage.setItem("isLoggedIn", "true");
+            localStorage.setItem("currentUser", email);
+            alert("Đăng nhập thành công! (Đã di cư tài khoản)");
+            window.location.href = "index.html";
+            return;
+        }
     }
+
+    alert("Email hoặc mật khẩu không chính xác!");
 };
 
 window.logout = function () {
     localStorage.removeItem("isLoggedIn");
     localStorage.removeItem("currentUser");
     alert("Đã đăng xuất!");
-    window.location.href = "login.html"; 
+    window.location.href = "login.html";
 };
 
 // Cập nhật lại tên hiển thị cá nhân ở phía dưới thanh Sidebar trái
 function updateUserSidebarDisplay() {
-    const storedUser = JSON.parse(localStorage.getItem("user_db"));
     const email = localStorage.getItem("currentUser");
+    // Cập nhật tên người dùng hiển thị trên sidebar bên trái
     const userDisplaySpan = document.getElementById("userDisplay");
-    
+    const storedUser = email ? getUserByEmail(email) : null;
+
     if (userDisplaySpan) {
         if (storedUser && storedUser.displayName) {
             userDisplaySpan.innerText = storedUser.displayName;
@@ -81,14 +155,17 @@ window.loadFeaturedMusic = function() {
 };
 
 window.searchMusic = function() {
+    // Lấy nội dung tìm kiếm từ ô input trên trang chính
     const searchInput = document.getElementById("searchInput");
     const query = searchInput.value;
 
     if (!query) return alert("Nhập tên bài hát bạn muốn tìm!");
 
     searchInput.value = "";
+    // Cập nhật tiêu đề phần nội dung để hiển thị kết quả tìm kiếm
     document.getElementById("sectionTitle").innerText = `Kết quả tìm kiếm cho: "${query}"`;
     
+    // Bỏ active tất cả tab sidebar và bật lại Discover
     document.querySelectorAll('.sidebar li').forEach(li => li.classList.remove('active'));
     document.getElementById('nav-discover').classList.add('active');
 
@@ -96,6 +173,9 @@ window.searchMusic = function() {
 };
 
 async function fetchAndDisplay(query, isFeatured) {
+    // === IMPORTANT ===
+    // Đây là nơi gọi API và render kết quả trả về.
+    // Tham chiếu tới container hiển thị danh sách nhạc
     const list = document.getElementById("musicList");
     list.innerHTML = `<div class="loader">${isFeatured ? "Đang tải gợi ý..." : "Đang tìm kiếm..."}</div>`;
 
@@ -117,6 +197,7 @@ async function fetchAndDisplay(query, isFeatured) {
 }
 
 function displayMusic(songs, isInsidePlaylist = false, currentPlaylistName = "") {
+    // Lấy DOM element để render các thẻ bài hát
     const list = document.getElementById("musicList");
     list.innerHTML = ""; 
 
@@ -171,6 +252,7 @@ function getFavorites() {
 }
 
 window.toggleFavorite = function(trackId, isInsidePlaylist = false, currentPlaylistName = "") {
+    // Xác định user đang đăng nhập để lưu favorite riêng
     const currentUser = localStorage.getItem("currentUser") || "guest";
     let favorites = getFavorites();
     const index = favorites.findIndex(song => song.trackId === trackId);
@@ -194,6 +276,7 @@ window.toggleFavorite = function(trackId, isInsidePlaylist = false, currentPlayl
 };
 
 window.showLibrary = function() {
+    // Thay đổi tiêu đề khi vào chế độ hiển thị thư viện yêu thích
     document.getElementById("sectionTitle").innerText = "Bài hát yêu thích của bạn";
     const favorites = getFavorites();
     currentDataSongs = favorites; 
@@ -221,18 +304,22 @@ function saveUserPlaylists(playlists) {
 }
 
 window.showPlaylistsMenu = function() {
+    // Cập nhật tiêu đề và xoá nội dung cũ bên trong musicList
     document.getElementById("sectionTitle").innerText = "Danh sách Playlist của bạn";
     const list = document.getElementById("musicList");
     list.innerHTML = "";
 
+    // Tạo header action động chứa input và nút Tạo playlist
     const actionHeader = document.createElement('div');
     actionHeader.className = 'playlist-header-actions';
     actionHeader.innerHTML = `
         <input type="text" id="newPlaylistName" class="input-playlist" placeholder="Nhập tên playlist mới...">
         <button class="btn-create-playlist" onclick="createNewPlaylist()">Tạo Playlist</button>
     `;
+    // Chèn header action phía trên danh sách musicList
     list.parentNode.insertBefore(actionHeader, list);
 
+    // Tạo container grid để hiển thị các playlist
     const playlistGrid = document.createElement('div');
     playlistGrid.className = 'playlist-grid';
     
@@ -260,6 +347,7 @@ window.showPlaylistsMenu = function() {
 };
 
 window.createNewPlaylist = function() {
+    // Lấy tên playlist mới người dùng vừa nhập
     const input = document.getElementById("newPlaylistName");
     const name = input.value.trim();
 
@@ -290,6 +378,7 @@ window.deletePlaylist = function(name) {
 
 // --- POP-UP NỔI LÊN ĐỂ CLICK CHUỘT CHỌN NHANH PLAYLIST THAY VÌ NHẬP SỐ ---
 window.addTrackToPlaylistPrompt = function(trackId) {
+    // Lấy danh sách playlist của người dùng hiện tại
     const playlists = getUserPlaylists();
     const playlistNames = Object.keys(playlists);
 
@@ -297,6 +386,7 @@ window.addTrackToPlaylistPrompt = function(trackId) {
         return alert("Bạn chưa có playlist nào. Hãy chuyển sang mục 'Playlist' để tạo trước!");
     }
 
+    // Tạo overlay popup để chọn playlist
     const modalOverlay = document.createElement('div');
     modalOverlay.className = 'playlist-modal-overlay';
     modalOverlay.id = 'playlistSelectModal';
@@ -320,6 +410,7 @@ window.addTrackToPlaylistPrompt = function(trackId) {
         </div>
     `;
 
+    // Thêm modal vào DOM để hiển thị popup chọn playlist
     document.body.appendChild(modalOverlay);
 
     modalOverlay.addEventListener('click', function(e) {
@@ -352,12 +443,14 @@ window.executeAddToPlaylist = function(targetPlaylist, trackId) {
 
 window.showPlaylistTracks = function(name) {
     removePlaylistActionHeader();
+    // Cập nhật tiêu đề section sang playlist đang xem
     document.getElementById("sectionTitle").innerText = `Playlist: ${name}`;
     
     const playlists = getUserPlaylists();
     const tracks = playlists[name] || [];
     currentDataSongs = tracks; 
 
+    // Lấy container musicList và chuyển kiểu hiển thị về lưới
     const list = document.getElementById("musicList");
     if (list) {
         list.style.display = "grid"; 
@@ -390,21 +483,20 @@ function removePlaylistActionHeader() {
 // --- 5. LOGIC XỬ LÝ TRANG PROFILE (HỒ SƠ CÁ NHÂN) ---
 
 window.showProfilePage = function() {
+    // === NOTE ===
+    // Đây là phần hiển thị thông tin profile người dùng.
     const email = localStorage.getItem("currentUser") || "Chưa có dữ liệu";
-    let storedUser = JSON.parse(localStorage.getItem("user_db"));
-    
-    if (!storedUser) {
-        storedUser = { email: email, displayName: email.split('@')[0], createdAt: "Hôm nay" };
-    }
-    if (!storedUser.createdAt) storedUser.createdAt = "24/5/2026"; 
+    let storedUser = getUserByEmail(email) || { email: email, displayName: email.split('@')[0], createdAt: "Hôm nay" };
+    if (!storedUser.createdAt) storedUser.createdAt = (new Date()).toLocaleDateString();
 
+    // Hiển thị trang profile và tạo các input profile trong musicList
     document.getElementById("sectionTitle").innerText = "Thông tin tài khoản";
     const list = document.getElementById("musicList");
-    
+
     // ÉP THẺ LIST BỎ CHẾ ĐỘ GRID ĐỂ KHUNG PROFILE ĐƯỢC GIÃN RỘNG TOÀN MÀN HÌNH
     list.style.display = "block";
     list.style.width = "100%";
-    
+
     list.innerHTML = `
         <div class="profile-container">
             <div class="profile-row">
@@ -426,16 +518,37 @@ window.showProfilePage = function() {
 
 
 window.saveProfileChanges = function() {
+    // Lấy tên hiển thị mới từ input trong profile
     const newName = document.getElementById("updateNameInput").value.trim();
     if (!newName) return alert("Tên hiển thị không được để trống!");
 
-    let storedUser = JSON.parse(localStorage.getItem("user_db"));
-    if (storedUser) {
-        storedUser.displayName = newName;
-        localStorage.setItem("user_db", JSON.stringify(storedUser));
-        alert("Đã cập nhật tên hiển thị thành công!");
-        updateUserSidebarDisplay(); 
+    const email = localStorage.getItem("currentUser");
+    if (!email) return alert('Không có người dùng hiện tại.');
+
+    const users = getUsers();
+    if (users[email]) {
+        users[email].displayName = newName;
+        saveUsers(users);
+    } else {
+        // di cư tài khoản cũ nếu tồn tại
+        try {
+            const legacy = JSON.parse(localStorage.getItem('user_db'));
+            if (legacy && legacy.email === email) {
+                legacy.displayName = newName;
+                localStorage.setItem('user_db', JSON.stringify(legacy));
+            } else {
+                // create minimal user record
+                users[email] = { email, displayName: newName, createdAt: (new Date()).toLocaleDateString(), passwordHash: '' };
+                saveUsers(users);
+            }
+        } catch (e) {
+            users[email] = { email, displayName: newName, createdAt: (new Date()).toLocaleDateString(), passwordHash: '' };
+            saveUsers(users);
+        }
     }
+
+    alert("Đã cập nhật tên hiển thị thành công!");
+    updateUserSidebarDisplay();
 };
 
 
@@ -444,7 +557,9 @@ window.saveProfileChanges = function() {
 window.switchTab = function(tab) {
     removePlaylistActionHeader();
     document.querySelectorAll('.sidebar li').forEach(li => li.classList.remove('active'));
+    // Bỏ active trên sidebar mỗi lần đổi tab
     
+    // Lấy các element cần điều khiển khi chuyển tab
     const searchHeader = document.getElementById("mainSearchHeader");
     const list = document.getElementById("musicList");
     
@@ -475,6 +590,8 @@ window.switchTab = function(tab) {
 
 
 document.addEventListener("DOMContentLoaded", function() {
+    // === REMEMBER ===
+    // Dòng này đảm bảo sự kiện Enter chỉ hoạt động khi DOM đã được tạo xong.
     const input = document.getElementById("searchInput");
     if (input) {
         input.addEventListener("keypress", function(event) {
